@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+
+	"github.com/labstack/echo/v4"
 )
 
 type WeatherResponse struct {
@@ -131,14 +133,14 @@ type WeatherResponse struct {
 }
 
 func fetchWeatherData(apiKey, location string) (*WeatherResponse, error) {
-	url := fmt.Sprintf("http://api.weatherapi.com/v1/forecast.json?key=958225ed5884456aa9a172637231311&q=Bandung&days=1&aqi=no&alerts=no", apiKey, location)
+	url := fmt.Sprintf("http://api.weatherapi.com/v1/forecast.json?key=%s&q=%s&days=1&aqi=no&alerts=no", apiKey, location)
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 
-	data, err := ioutil.ReadAll(response.Body)
+	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -151,34 +153,23 @@ func fetchWeatherData(apiKey, location string) (*WeatherResponse, error) {
 	return &weather, nil
 }
 
-func weatherForecastHandler(w http.ResponseWriter, r *http.Request) {
-	apiKey := "c958225ed5884456aa9a172637231311" // Replace with your WeatherAPI.com API key
-	location := r.URL.Query().Get("location")
+func weatherForecastHandler(ctx echo.Context) error {
+	apiKey := "958225ed5884456aa9a172637231311" // Replace with your WeatherAPI.com API key
+	location := ctx.QueryParam("location")
 	if location == "" {
-		http.Error(w, "Location is required", http.StatusBadRequest)
-		return
+		return ctx.JSON(http.StatusBadRequest, "Location is required")
 	}
 
 	weather, err := fetchWeatherData(apiKey, location)
 	if err != nil {
-		http.Error(w, "Error fetching weather data", http.StatusInternalServerError)
-		return
+		return ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	// You can format the weather data and send it as a response in your desired format.
-	jsonResponse, err := json.Marshal(weather)
-	if err != nil {
-		http.Error(w, "Error encoding JSON response", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonResponse)
+	return ctx.JSON(http.StatusOK, weather)
 }
 
 func main() {
-	http.HandleFunc("/weather", weatherForecastHandler)
-	port := 8080 // Choose the port you want to use
-	fmt.Printf("Server is running on :%d...\n", port)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	e := echo.New()
+	e.GET("/weather", weatherForecastHandler)
+	e.Logger.Fatal(e.Start(":8080"))
 }
